@@ -39,31 +39,47 @@ function updateReady() {
   $('seek').max = limit() || 1; $('duration').textContent = format(limit());
   if (ok) $('status').textContent = 'Ready. Playback ends at the shorter video.';
 }
+function loadFile(file, i) {
+  if (!file || !file.type.startsWith('video/')) { $('status').textContent = 'Please drop a video file onto Video A or Video B.'; return; }
+  const video = videos[i];
+  const letter = i ? 'b' : 'a';
+  pause(); const generation = ++generations[i]; loaded[i] = false; updateReady();
+  if (urls[i]) URL.revokeObjectURL(urls[i]);
+  $('name-' + letter).textContent = file.name;
+  $('info-' + letter).textContent = 'Loading...';
+  video.onloadeddata = () => {
+    if (generation !== generations[i]) return;
+    if (!Number.isFinite(video.duration) || !video.duration || !video.videoWidth) { video.onerror(); return; }
+    loaded[i] = true;
+    $('info-' + letter).textContent = `${video.videoWidth} × ${video.videoHeight} · ${format(video.duration)} · ${(file.size / 1048576).toFixed(1)} MB`;
+    updateReady(); if (ready()) seek(0);
+  };
+  video.onerror = () => {
+    if (generation !== generations[i]) return;
+    pause(); loaded[i] = false; updateReady();
+    $('info-' + letter).textContent = 'Unable to decode this file';
+    $('status').textContent = `Video ${letter.toUpperCase()} cannot be decoded. Try an MP4 with H.264 video or a browser-supported WebM.`;
+  };
+  urls[i] = URL.createObjectURL(file); video.src = urls[i]; video.load();
+}
 videos.forEach((video, i) => {
   video.muted = true;
   const letter = i ? 'b' : 'a';
-  $(`file-${letter}`).addEventListener('change', async e => {
-    const file = e.target.files[0]; if (!file) return;
-    pause(); const generation = ++generations[i]; loaded[i] = false; updateReady();
-    if (urls[i]) URL.revokeObjectURL(urls[i]);
-    $('name-' + letter).textContent = file.name;
-    $('info-' + letter).textContent = 'Loading...';
-    video.onloadeddata = () => {
-      if (generation !== generations[i]) return;
-      if (!Number.isFinite(video.duration) || !video.duration || !video.videoWidth) { video.onerror(); return; }
-      loaded[i] = true;
-      $('info-' + letter).textContent = `${video.videoWidth} × ${video.videoHeight} · ${format(video.duration)} · ${(file.size / 1048576).toFixed(1)} MB`;
-      updateReady(); if (ready()) seek(0);
-    };
-    video.onerror = () => {
-      if (generation !== generations[i]) return;
-      pause(); loaded[i] = false; updateReady();
-      $('info-' + letter).textContent = 'Unable to decode this file';
-      $('status').textContent = `Video ${letter.toUpperCase()} cannot be decoded. Try an MP4 with H.264 video or a browser-supported WebM.`;
-    };
-    urls[i] = URL.createObjectURL(file); video.src = urls[i]; video.load();
-  });
+  $(`file-${letter}`).addEventListener('change', e => loadFile(e.target.files[0], i));
   video.addEventListener('ended', () => { if (playing && ready()) { pause(); if ($('loop').checked) { seek(0); play(); } } });
+});
+const sources = $('sources');
+let dragDepth = 0;
+document.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); });
+document.addEventListener('drop', e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); });
+sources.addEventListener('dragenter', e => { if (!e.dataTransfer.types.includes('Files')) return; e.preventDefault(); dragDepth++; sources.classList.add('drop-active'); });
+sources.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+sources.addEventListener('dragleave', e => { if (!e.dataTransfer.types.includes('Files')) return; dragDepth--; if (dragDepth <= 0) { dragDepth = 0; sources.classList.remove('drop-active'); } });
+sources.addEventListener('drop', e => {
+  if (!e.dataTransfer.files.length) return;
+  e.preventDefault(); dragDepth = 0; sources.classList.remove('drop-active');
+  const slot = e.target.closest('.source')?.dataset.slot;
+  loadFile(e.dataTransfer.files[0], slot === 'b' ? 1 : 0);
 });
 function fit(context, video, x, y, w, h) {
   const scale = Math.min(w / video.videoWidth, h / video.videoHeight);
@@ -88,8 +104,9 @@ function render() {
   const w = Math.max(1, Math.round(canvas.clientWidth * Math.min(devicePixelRatio, 2)));
   const h = Math.max(1, Math.round(canvas.clientHeight * Math.min(devicePixelRatio, 2)));
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-  ctx.fillStyle = '#090a0b'; ctx.fillRect(0, 0, w, h);
-  if (ready() && videos.every(v => v.readyState >= 2)) {
+  // Preserve the last complete composite while browser decoders seek to a new frame.
+  if (ready() && videos.every(v => v.readyState >= 2 && !v.seeking)) {
+    ctx.fillStyle = '#090a0b'; ctx.fillRect(0, 0, w, h);
     const mode = $('mode').value;
     if (mode === 'horizontal' || mode === 'vertical') {
       const horizontal = mode === 'horizontal';

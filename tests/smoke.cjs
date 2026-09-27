@@ -1,6 +1,7 @@
 // Run with Playwright installed and the two generated color fixtures in TEMP.
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const path = require('node:path');
+const fs = require('node:fs');
 const assert = require('node:assert/strict');
 (async () => {
   const browser = await chromium.launch({headless: true, channel: 'msedge'});
@@ -11,7 +12,20 @@ const assert = require('node:assert/strict');
     const red = path.join(process.env.TEMP, 'VideoCompareMa-red.webm');
     const blue = path.join(process.env.TEMP, 'VideoCompareMa-blue.webm');
     await page.locator('#file-a').setInputFiles(red);
-    await page.locator('#file-b').setInputFiles(blue);
+    await page.evaluate(() => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(['fixture'], 'fixture.webm', {type: 'video/webm'}));
+      document.getElementById('sources').dispatchEvent(new DragEvent('dragenter', {bubbles: true, dataTransfer: transfer}));
+    });
+    assert(await page.locator('#sources').evaluate(e => e.classList.contains('drop-active')));
+    const blueData = fs.readFileSync(blue).toString('base64');
+    await page.locator('.source[data-slot="b"]').evaluate((target, data) => {
+      const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], 'dropped-blue.webm', {type: 'video/webm'}));
+      target.dispatchEvent(new DragEvent('drop', {bubbles: true, dataTransfer: transfer}));
+    }, blueData);
+    assert(await page.locator('#sources').evaluate(e => !e.classList.contains('drop-active')));
     await page.waitForFunction(() => !document.getElementById('play').disabled);
     const pixel = async (x = .5, y = .5) => {
       await page.waitForTimeout(100);
@@ -55,6 +69,7 @@ const assert = require('node:assert/strict');
     await page.click('#play');
     await page.selectOption('#mode','horizontal');
     await page.screenshot({path: path.resolve(__dirname, 'desktop.png')});
+    await page.screenshot({path: path.resolve(__dirname, '../docs/images/video-comparema.png')});
     await page.setViewportSize({width:390,height:844}); await page.waitForTimeout(100);
     assert(await page.evaluate(() => document.documentElement.scrollWidth<=innerWidth));
     assert(isRed(await pixel(.25))); assert(isBlue(await pixel(.75)));
@@ -63,6 +78,6 @@ const assert = require('node:assert/strict');
     await page.waitForFunction(() => document.getElementById('info-b').textContent.includes('Unable'));
     assert(await page.locator('#play').isDisabled());
     assert.deepEqual(errors,[]);
-    console.log('PASS: all five modes, divider drag and axis, opacity, identical/different pixels, gain, seeking, playback, shorter duration, loop, mobile layout, decode error.');
+    console.log('PASS: picker and drag-and-drop loading, drag highlight, all five modes, divider drag and axis, opacity, identical/different pixels, gain, seeking, playback, shorter duration, loop, mobile layout, decode error.');
   } finally { await browser.close(); }
 })().catch(e => {console.error(e);process.exitCode=1;});

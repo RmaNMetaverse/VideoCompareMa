@@ -11,10 +11,11 @@
 <body>
 <main>
   <header><h1>VideoCompareMa</h1><span class="privacy">Local files · Private comparison</span></header>
-  <section class="sources" aria-label="Video files">
-    <label class="source"><span class="tag a">A</span><span class="file-info"><strong id="name-a">Select video A</strong><small id="info-a">No file selected</small></span><input id="file-a" type="file" accept="video/*"><span class="choose">Choose file</span></label>
-    <label class="source"><span class="tag b">B</span><span class="file-info"><strong id="name-b">Select video B</strong><small id="info-b">No file selected</small></span><input id="file-b" type="file" accept="video/*"><span class="choose">Choose file</span></label>
+  <section id="sources" class="sources" aria-label="Video files" aria-describedby="drop-hint">
+    <label class="source" data-slot="a"><span class="tag a">A</span><span class="file-info"><strong id="name-a">Select video A</strong><small id="info-a">No file selected</small></span><input id="file-a" type="file" accept="video/*"><span class="choose">Choose file</span></label>
+    <label class="source" data-slot="b"><span class="tag b">B</span><span class="file-info"><strong id="name-b">Select video B</strong><small id="info-b">No file selected</small></span><input id="file-b" type="file" accept="video/*"><span class="choose">Choose file</span></label>
   </section>
+  <p id="drop-hint" class="drop-hint">Drag a video onto A or B, or choose a file.</p>
   <section class="toolbar" aria-label="Comparison settings">
     <label>View<select id="mode"><option value="horizontal">Side by side</option><option value="vertical">Stacked vertically</option><option value="wipe">A/B slider</option><option value="opacity">Transparency</option><option value="difference">Difference</option></select></label>
     <label id="axis-setting" hidden>Divider<select id="axis"><option value="x">Left / right</option><option value="y">Top / bottom</option></select></label>
