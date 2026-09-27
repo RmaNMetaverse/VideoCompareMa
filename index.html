@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Compare two local videos with synchronized playback, a wipe, transparency, and pixel differences.">
+  <title>VideoCompareMa</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+<main>
+  <header><h1>VideoCompareMa</h1><span class="privacy">Local files · Private comparison</span></header>
+  <section class="sources" aria-label="Video files">
+    <label class="source"><span class="tag a">A</span><span class="file-info"><strong id="name-a">Select video A</strong><small id="info-a">No file selected</small></span><input id="file-a" type="file" accept="video/*"><span class="choose">Choose file</span></label>
+    <label class="source"><span class="tag b">B</span><span class="file-info"><strong id="name-b">Select video B</strong><small id="info-b">No file selected</small></span><input id="file-b" type="file" accept="video/*"><span class="choose">Choose file</span></label>
+  </section>
+  <section class="toolbar" aria-label="Comparison settings">
+    <label>View<select id="mode"><option value="horizontal">Side by side</option><option value="vertical">Stacked vertically</option><option value="wipe">A/B slider</option><option value="opacity">Transparency</option><option value="difference">Difference</option></select></label>
+    <label id="axis-setting" hidden>Divider<select id="axis"><option value="x">Left / right</option><option value="y">Top / bottom</option></select></label>
+    <label id="opacity-setting" hidden>B opacity <input id="opacity" type="range" min="0" max="100" value="50"><output id="opacity-value">50%</output></label>
+    <label id="gain-setting" hidden>Difference gain<select id="gain"><option value="1">1x</option><option value="2">2x</option><option value="4">4x</option><option value="8">8x</option></select></label>
+    <button id="fullscreen" title="Full screen" aria-label="Full screen">⛶</button>
+  </section>
+  <section id="viewer" class="viewer" aria-label="Video comparison">
+    <canvas id="canvas" aria-label="Compared video frames"></canvas>
+    <div id="empty"><span class="empty-mark">A <span>↔</span> B</span><h2>Two videos. One timeline.</h2><p>Select both files to begin.</p></div>
+    <div id="divider" role="slider" tabindex="0" aria-label="A/B divider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" hidden><span>↔</span></div>
+  </section>
+  <section class="transport" aria-label="Playback controls">
+    <div class="timeline"><output id="time">00:00.000</output><input id="seek" aria-label="Playback position" type="range" min="0" max="1" step="0.001" value="0" disabled><output id="duration">00:00.000</output></div>
+    <div class="playback"><button id="restart" title="Restart" aria-label="Restart" disabled>↺</button><button id="play" title="Play / pause" aria-label="Play" disabled>▶</button><label>Speed<select id="speed"><option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="1.5">1.5x</option><option value="2">2x</option></select></label><label>Audio<select id="audio"><option value="none">Muted</option><option value="a">Video A</option><option value="b">Video B</option></select></label><label class="check"><input id="loop" type="checkbox">Loop</label></div>
+  </section>
+  <p id="status" role="status">Waiting for two videos.</p>
+  <footer>VideoCompareMa <span>Browser-decoded video · No uploads</span></footer>
+</main>
+<video id="video-a" playsinline preload="auto" hidden></video><video id="video-b" playsinline preload="auto" hidden></video>
+</body>
+</html>

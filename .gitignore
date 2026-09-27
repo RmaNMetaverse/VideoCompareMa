@@ -1,0 +1,5 @@
+_site/
+node_modules/
+tests/*.png
+.DS_Store
+Thumbs.db

@@ -1,0 +1,68 @@
+// Run with Playwright installed and the two generated color fixtures in TEMP.
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+(async () => {
+  const browser = await chromium.launch({headless: true, channel: 'msedge'});
+  try {
+    const page = await browser.newPage({viewport: {width: 1280, height: 900}});
+    const errors = []; page.on('pageerror', e => errors.push(e.message));
+    await page.goto('file:///' + path.resolve(__dirname, '../index.html').replaceAll('\\', '/'));
+    const red = path.join(process.env.TEMP, 'VideoCompareMa-red.webm');
+    const blue = path.join(process.env.TEMP, 'VideoCompareMa-blue.webm');
+    await page.locator('#file-a').setInputFiles(red);
+    await page.locator('#file-b').setInputFiles(blue);
+    await page.waitForFunction(() => !document.getElementById('play').disabled);
+    const pixel = async (x = .5, y = .5) => {
+      await page.waitForTimeout(100);
+      return page.evaluate(([x, y]) => { const c = document.getElementById('canvas'); return [...c.getContext('2d').getImageData(Math.floor(c.width*x), Math.floor(c.height*y), 1, 1).data]; }, [x, y]);
+    };
+    const isRed = p => p[0] > 230 && p[2] < 20;
+    const isBlue = p => p[2] > 230 && p[0] < 20;
+    assert(isRed(await pixel(.25))); assert(isBlue(await pixel(.75)));
+    await page.selectOption('#mode', 'vertical');
+    assert(isRed(await pixel(.5,.25))); assert(isBlue(await pixel(.5,.75)));
+    await page.selectOption('#mode', 'wipe');
+    assert(isRed(await pixel(.25))); assert(isBlue(await pixel(.75)));
+    const box = await page.locator('#canvas').boundingBox();
+    await page.mouse.move(box.x+box.width/2,box.y+box.height/2); await page.mouse.down();
+    await page.mouse.move(box.x+box.width*.8,box.y+box.height/2); await page.mouse.up();
+    assert(isRed(await pixel(.75)));
+    await page.selectOption('#axis','y');
+    assert(isRed(await pixel(.5,.25))); assert(isBlue(await pixel(.5,.9)));
+    await page.selectOption('#mode','opacity');
+    const mixed = await pixel(); assert(mixed[0]>110 && mixed[0]<145 && mixed[2]>110 && mixed[2]<145);
+    await page.locator('#opacity').evaluate(e => {e.value=100;e.dispatchEvent(new Event('input'));});
+    assert(isBlue(await pixel()));
+    await page.selectOption('#mode','difference');
+    const diff = await pixel(); assert(diff[0]>230 && diff[2]>230 && diff[1]<20);
+    await page.locator('#file-b').setInputFiles(red);
+    await page.waitForFunction(() => !document.getElementById('play').disabled);
+    const identical = await pixel(); assert(identical.slice(0,3).every(n=>n===0));
+    await page.selectOption('#gain','8'); assert((await pixel()).slice(0,3).every(n=>n===0));
+    await page.locator('#seek').evaluate(e => {e.value=.5;e.dispatchEvent(new Event('input'));});
+    await page.waitForTimeout(150);
+    assert(await page.evaluate(() => ['video-a','video-b'].every(id => Math.abs(document.getElementById(id).currentTime-.5)<.03)));
+    await page.click('#play'); await page.waitForTimeout(400);
+    assert(await page.evaluate(() => document.getElementById('video-a').currentTime>.7));
+    await page.click('#play');
+    await page.locator('#file-b').setInputFiles(blue); await page.waitForFunction(() => !document.getElementById('play').disabled);
+    await page.locator('#seek').evaluate(e => {e.value=1.8;e.dispatchEvent(new Event('input'));});
+    await page.click('#play'); await page.waitForTimeout(600);
+    assert(await page.evaluate(() => ['video-a','video-b'].every(id => document.getElementById(id).paused)));
+    await page.check('#loop'); await page.click('#play'); await page.waitForTimeout(300);
+    assert(await page.evaluate(() => document.getElementById('video-a').currentTime<1));
+    await page.click('#play');
+    await page.selectOption('#mode','horizontal');
+    await page.screenshot({path: path.resolve(__dirname, 'desktop.png')});
+    await page.setViewportSize({width:390,height:844}); await page.waitForTimeout(100);
+    assert(await page.evaluate(() => document.documentElement.scrollWidth<=innerWidth));
+    assert(isRed(await pixel(.25))); assert(isBlue(await pixel(.75)));
+    await page.screenshot({path:path.resolve(__dirname,'mobile.png')});
+    await page.locator('#file-b').setInputFiles({name:'broken.mp4',mimeType:'video/mp4',buffer:Buffer.from('invalid')});
+    await page.waitForFunction(() => document.getElementById('info-b').textContent.includes('Unable'));
+    assert(await page.locator('#play').isDisabled());
+    assert.deepEqual(errors,[]);
+    console.log('PASS: all five modes, divider drag and axis, opacity, identical/different pixels, gain, seeking, playback, shorter duration, loop, mobile layout, decode error.');
+  } finally { await browser.close(); }
+})().catch(e => {console.error(e);process.exitCode=1;});
