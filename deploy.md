@@ -50,50 +50,74 @@ sudo git clone https://github.com/RmaNMetaverse/VideoCompareMa.git /var/www/Vide
 
 The app uses relative asset paths and works without modifying its source.
 
-## 3. Configure the nginx server block
+## 3. Add the VideoCompareMa nginx route
 
-If nginx already serves your server IP, add **only the two location blocks** below inside that existing `server { ... }` block. Do not create a second default server. You can inspect the active configuration with `sudo nginx -T`; Ubuntu's stock configuration is usually `/etc/nginx/sites-available/default`.
+This server already has one default server in `/etc/nginx/sites-enabled/comfyfleet`. It proxies `/` to ComfyFleet on port 8787 and mounts KareMa through `/etc/nginx/snippets/karema.conf`. Keep that configuration intact. Add VideoCompareMa as a second snippet in the same server block; do not create another `server { ... }` block or change `location /`.
 
-For a fresh Ubuntu nginx installation, edit that file:
+Create the static route snippet:
 
 ```bash
-sudo nano /etc/nginx/sites-available/default
+sudo nano /etc/nginx/snippets/videocomparema.conf
 ```
 
-Use the following complete server block, replacing `<serverIP>` with the real IP address:
+Paste this exact content:
+
+```nginx
+# /etc/nginx/snippets/videocomparema.conf
+
+# Redirect the no-slash form instead of allowing it to fall through to ComfyFleet.
+location = /VideoCompareMa {
+    return 301 /VideoCompareMa/;
+}
+
+# Serve this static application directly from its Git checkout.
+location ^~ /VideoCompareMa/ {
+    alias /var/www/VideoCompareMa/;
+    index index.html;
+    try_files $uri $uri/ =404;
+    add_header Cache-Control "no-cache";
+    add_header X-Content-Type-Options "nosniff" always;
+}
+```
+
+Then edit the existing site configuration:
+
+```bash
+sudo nano /etc/nginx/sites-enabled/comfyfleet
+```
+
+Inside its existing `server { ... }` block, immediately after this line:
+
+```nginx
+include /etc/nginx/snippets/karema.conf;
+```
+
+add this line:
+
+```nginx
+include /etc/nginx/snippets/videocomparema.conf;
+```
+
+The resulting start of that server block should look like this:
 
 ```nginx
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
-    server_name <serverIP>;
+    server_name _;
 
-    # Keep your existing root/location configuration here if hosting other apps.
-    root /var/www/html;
-    index index.html;
-
-    location = /VideoCompareMa {
-        return 301 /VideoCompareMa/;
-    }
-
-    location ^~ /VideoCompareMa/ {
-        # /VideoCompareMa/app.js maps to /var/www/VideoCompareMa/app.js.
-        root /var/www;
-        index index.html;
-        try_files $uri $uri/ =404;
-        add_header Cache-Control "no-cache";
-        add_header X-Content-Type-Options "nosniff" always;
-    }
+    include /etc/nginx/snippets/karema.conf;
+    include /etc/nginx/snippets/videocomparema.conf;
+    client_max_body_size 10G;
 
     location / {
-        try_files $uri $uri/ =404;
+        proxy_pass http://127.0.0.1:8787;
+        # existing ComfyFleet settings remain here
     }
 }
 ```
 
-The standard `/etc/nginx/nginx.conf` includes `/etc/nginx/mime.types` inside `http { ... }`. Keep that include: it supplies the CSS and JavaScript content types. The `^~` prefix ensures existing regex locations do not accidentally handle the app's assets.
-
-On stock Ubuntu, the default site is already enabled by a symlink in `/etc/nginx/sites-enabled/`. If using a custom site file instead, enable that file there and ensure that only one active server uses `default_server` for port 80.
+The `^~` route wins over the existing `/` proxy, so requests under `/VideoCompareMa/` are served by nginx from `/var/www/VideoCompareMa/`. The standard `/etc/nginx/nginx.conf` already includes `/etc/nginx/mime.types`, so JavaScript and CSS have correct content types.
 
 ## 4. Validate and reload
 
@@ -105,7 +129,7 @@ curl -I http://127.0.0.1/VideoCompareMa/
 curl -I http://127.0.0.1/VideoCompareMa/app.js
 ```
 
-Expect a 301 response for the path without a slash and 200 responses for the app and JavaScript. If you have multiple virtual hosts, supply `-H 'Host: <serverIP>'` when testing through localhost.
+Expect a 301 response for the path without a slash and 200 responses for the app and JavaScript. These local requests exercise the same default server that currently hosts ComfyFleet.
 
 Open `http://<serverIP>/VideoCompareMa` in a browser. Select two videos and check every view, playback, seeking, and the divider. No `client_max_body_size` change is necessary because files are not uploaded.
 
@@ -121,7 +145,7 @@ nginx does not need restarting for static file updates. Reload the browser after
 
 ## Troubleshooting
 
-- **404:** Check capitalization, `/var/www/VideoCompareMa/index.html`, the repository checkout, the active server block, and the `root /var/www;` setting inside the app location.
+- **404:** Check capitalization, `/var/www/VideoCompareMa/index.html`, the repository checkout, `/etc/nginx/snippets/videocomparema.conf`, and its `include` line in `/etc/nginx/sites-enabled/comfyfleet`.
 - **403:** Ensure the directory has execute permission and the files have read permission for nginx. Check `/var/log/nginx/error.log`.
 - **Blank page or missing styles:** Check browser developer tools for failed requests and verify the trailing-slash redirect and MIME types.
 - **Cannot connect:** Check nginx status, the host firewall, and the provider's firewall. Use `sudo systemctl status nginx`.
