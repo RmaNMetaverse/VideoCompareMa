@@ -4,13 +4,13 @@ VideoCompareMa is a static application. There is no build command, Node.js servi
 
 The final address is `http://<serverIP>/VideoCompareMa/`. The configuration below redirects `/VideoCompareMa` to the trailing-slash address so relative assets resolve correctly. The path is case-sensitive.
 
-## 1. Install nginx
+## 1. Install nginx and Git
 
 SSH into your Ubuntu server and run:
 
 ```bash
 sudo apt update
-sudo apt install nginx
+sudo apt install nginx git
 sudo systemctl enable --now nginx
 ```
 
@@ -24,28 +24,31 @@ sudo ufw status
 
 Also allow inbound TCP port 80 in your hosting provider's firewall, if applicable.
 
-## 2. Copy the application
+## 2. Clone the application repository
 
-On the server, create the public directory:
-
-```bash
-sudo mkdir -p /var/www/VideoCompareMa
-```
-
-From your local machine, in the project directory, replace `youruser` and `<serverIP>` and upload the three application files to your SSH user's home directory:
+The public directory is a checkout of the GitHub repository. Clone it directly on the server:
 
 ```bash
-scp index.html style.css app.js youruser@<serverIP>:~/
-```
-
-Back in the server's SSH session, install them with permissions that nginx can read:
-
-```bash
-sudo install -m 644 ~/index.html ~/style.css ~/app.js /var/www/VideoCompareMa/
+sudo git clone https://github.com/RmaNMetaverse/VideoCompareMa.git /var/www/VideoCompareMa
 sudo chmod 755 /var/www /var/www/VideoCompareMa
 ```
 
-Do not copy test fixtures, development scripts, or this guide into the public directory. The app uses relative asset paths and works without modifying its source.
+For a private repository, authenticate GitHub before cloning. SSH deploy keys are a good fit for a server: add a read-only deploy key under the repository's **Settings > Deploy keys**, then use this clone address instead:
+
+```bash
+sudo git clone git@github.com:RmaNMetaverse/VideoCompareMa.git /var/www/VideoCompareMa
+```
+
+The repository contains source and documentation in addition to the application files. nginx serves only the files requested beneath `/VideoCompareMa/`; no build step is required. Do not add secrets or private configuration files to the repository.
+
+If the target directory already exists from an older manual installation, back it up before cloning instead of deleting it:
+
+```bash
+sudo mv /var/www/VideoCompareMa /var/www/VideoCompareMa.backup-$(date +%F-%H%M%S)
+sudo git clone https://github.com/RmaNMetaverse/VideoCompareMa.git /var/www/VideoCompareMa
+```
+
+The app uses relative asset paths and works without modifying its source.
 
 ## 3. Configure the nginx server block
 
@@ -108,11 +111,17 @@ Open `http://<serverIP>/VideoCompareMa` in a browser. Select two videos and chec
 
 ## Updates
 
-Repeat the upload and `sudo install` commands with the new three files, then reload the browser. nginx does not need restarting for static file updates. The `no-cache` header allows caching with revalidation, so browsers check for updated files.
+After a new commit has been pushed to `main`, update the server checkout:
+
+```bash
+sudo git -C /var/www/VideoCompareMa pull --ff-only origin main
+```
+
+nginx does not need restarting for static file updates. Reload the browser after the pull. The `no-cache` header allows caching with revalidation, so browsers check for updated files. `--ff-only` refuses to overwrite server-side edits; resolve or discard those edits deliberately before updating. Keep deployment-specific settings outside this repository.
 
 ## Troubleshooting
 
-- **404:** Check capitalization, `/var/www/VideoCompareMa/index.html`, the active server block, and the `root /var/www;` setting inside the app location.
+- **404:** Check capitalization, `/var/www/VideoCompareMa/index.html`, the repository checkout, the active server block, and the `root /var/www;` setting inside the app location.
 - **403:** Ensure the directory has execute permission and the files have read permission for nginx. Check `/var/log/nginx/error.log`.
 - **Blank page or missing styles:** Check browser developer tools for failed requests and verify the trailing-slash redirect and MIME types.
 - **Cannot connect:** Check nginx status, the host firewall, and the provider's firewall. Use `sudo systemctl status nginx`.
